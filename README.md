@@ -1,6 +1,10 @@
 # 🤖 GenAI Ticket Analyzer
 
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://genai-ticket-analyzer.streamlit.app/)
+
 An AI-powered Customer Support Triage & Copilot that automatically classifies, prioritizes, and drafts responses for support tickets using Google Gemini API and RAG (Retrieval-Augmented Generation).
+
+🔗 **Live Demo:** [https://genai-ticket-analyzer.streamlit.app/](https://genai-ticket-analyzer.streamlit.app/)
 
 ---
 
@@ -132,23 +136,19 @@ streamlit run src/app.py
 
 Open your browser at **http://localhost:8501**
 
+> 💡 **Or try the live version:** [https://genai-ticket-analyzer.streamlit.app/](https://genai-ticket-analyzer.streamlit.app/)
+
 ---
 
 ## 📸 Screenshots
 
-*Screenshots will be added after deployment.*
-
-<!-- 
-![Analyze Ticket](screenshots/analyze.png)
-![Agent Copilot](screenshots/copilot.png)
-![Analytics Dashboard](screenshots/analytics.png)
--->
+> Visit the [Live Demo](https://genai-ticket-analyzer.streamlit.app/) to see the app in action!
 
 ---
 
 ## 🔮 Future Improvements
 
-- Auto-generate Ticket IDs for live manual submissions
+- ~~Auto-generate Ticket IDs for live manual submissions~~ ✅ Done
 - Bulk CSV upload and batch analysis from the dashboard
 - AI accuracy benchmarking with confusion matrix visualization
 - Email notification integration for high-priority tickets
