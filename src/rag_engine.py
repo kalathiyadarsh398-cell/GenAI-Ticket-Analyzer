@@ -1,8 +1,10 @@
 import chromadb
 from pathlib import Path
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+
 # Create ChromaDB database
-client = chromadb.PersistentClient(path="chroma_db")
+client = chromadb.PersistentClient(path=str(BASE_DIR / "chroma_db"))
 
 # Create collection
 collection = client.get_or_create_collection(name="policies")
@@ -14,7 +16,8 @@ def load_policies():
         print("Policies already loaded")
         return
 
-    policy_folder = Path("data/knowledge_base")
+    policy_folder = BASE_DIR / "data" / "knowledge_base"
+
 
     for file in policy_folder.glob("*.md"):
 

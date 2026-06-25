@@ -154,3 +154,10 @@ Open your browser at **http://localhost:8501**
 - Email notification integration for high-priority tickets
 - Multi-language ticket support
 
+---
+
+## ✍️ Author
+
+**Darsh Kalathiya**
+
+- GitHub: [github.com/kalathiyadarsh398-cell](https://github.com/kalathiyadarsh398-cell)

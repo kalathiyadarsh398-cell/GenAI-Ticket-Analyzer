@@ -2,8 +2,13 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 import plotly.express as px
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.config import DB_PATH
 from src.ticket_processor import process_ticket
+from src.database import create_tables
+
+create_tables()
 
 st.set_page_config(
     page_title="GenAI Ticket Analyzer",
