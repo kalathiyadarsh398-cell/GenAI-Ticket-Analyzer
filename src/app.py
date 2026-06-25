@@ -26,7 +26,9 @@ if page == "Analyze Ticket":
 
     st.title("GenAI Ticket Analyzer")
 
-    ticket_id = st.text_input("Ticket ID", "T001")
+    import uuid, time
+    auto_id = f"T-{uuid.uuid4().hex[:6].upper()}"
+    ticket_id = st.text_input("Ticket ID", auto_id)
 
     description = st.text_area("Ticket Description", height=150)
 
