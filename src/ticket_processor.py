@@ -5,7 +5,6 @@ from src.rag_engine import search_policy
 
 
 def process_ticket(ticket_id, description):
-
     print("Processing Ticket:", ticket_id)
 
     # Analyze ticket using Gemini
@@ -20,6 +19,13 @@ def process_ticket(ticket_id, description):
     # Save result to database
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+
+    # Ensure a ticket row exists so Analytics and Agent Copilot can find it
+    cursor.execute("""
+    INSERT OR IGNORE INTO tickets
+        (ticket_id, description, submission_date, source)
+    VALUES (?, ?, datetime('now'), 'ui')
+    """, (ticket_id, description))
 
     cursor.execute("""
     INSERT OR REPLACE INTO ai_predictions
