@@ -139,7 +139,7 @@ elif page == "Analytics":
 
     conn = sqlite3.connect(DB_PATH)
 
-    # Single query — pulls CSV columns directly so charts are always populated
+    # Single query — uses satisfaction_score to derive Sentiment for all CSV tickets
     df = pd.read_sql("""
         SELECT
             t.ticket_id         AS "Ticket ID",
@@ -150,7 +150,15 @@ elif page == "Analytics":
             t.resolution_hours,
             t.satisfaction_score,
             t.assigned_agent    AS "Agent",
-            COALESCE(p.ai_sentiment, 'Not Analyzed') AS "Sentiment",
+            COALESCE(
+                p.ai_sentiment,
+                CASE
+                    WHEN t.satisfaction_score >= 4 THEN 'Positive'
+                    WHEN t.satisfaction_score = 3  THEN 'Neutral'
+                    WHEN t.satisfaction_score <= 2 THEN 'Negative'
+                    ELSE 'Neutral'
+                END
+            ) AS "Sentiment",
             COALESCE(a.action, 'Pending') AS "Status"
         FROM tickets t
         LEFT JOIN ai_predictions p ON t.ticket_id = p.ticket_id
@@ -166,21 +174,24 @@ elif page == "Analytics":
 
     # KPI values
     total       = len(df)
-    analyzed    = int((df["Sentiment"] != "Not Analyzed").sum())
+    ai_preds    = int((df["Sentiment"].isin(["Positive", "Neutral", "Negative"]) &
+                       df["satisfaction_score"].isna()).sum())  # true AI-analyzed count
     reviewed    = int((df["Status"] != "Pending").sum())
     pending     = int((df["Status"] == "Pending").sum())
     high_pri    = int((df["Priority"].astype(str).str.lower() == "high").sum())
     avg_hours   = df["resolution_hours"].mean()
     avg_label   = f"{avg_hours:.1f} hrs" if pd.notnull(avg_hours) else "N/A"
+    avg_sat     = df["satisfaction_score"].mean()
+    avg_sat_str = f"{avg_sat:.1f} / 5" if pd.notnull(avg_sat) else "N/A"
 
     # KPI row
     c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Total Tickets",   f"{total:,}")
-    c2.metric("AI Analyzed",     f"{analyzed:,}")
-    c3.metric("Agent Reviewed",  f"{reviewed:,}")
-    c4.metric("Pending Review",  f"{pending:,}")
-    c5.metric("Avg Resolution",  avg_label)
-    c6.metric("High Priority",   f"{high_pri:,}")
+    c1.metric("Total Tickets",    f"{total:,}")
+    c2.metric("High Priority",    f"{high_pri:,}")
+    c3.metric("Agent Reviewed",   f"{reviewed:,}")
+    c4.metric("Pending Review",   f"{pending:,}")
+    c5.metric("Avg Resolution",   avg_label)
+    c6.metric("Avg Satisfaction", avg_sat_str)
 
     st.markdown("---")
 
