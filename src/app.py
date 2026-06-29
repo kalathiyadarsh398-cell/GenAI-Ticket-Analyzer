@@ -12,7 +12,10 @@ from src.database import create_tables
 from src.data_loader import load_csv_if_empty
 
 create_tables()
-load_csv_if_empty()
+try:
+    load_csv_if_empty()
+except Exception as _e:
+    st.error(f"CSV load failed: {_e}")
 
 st.set_page_config(page_title="GenAI Ticket Analyzer", layout="wide")
 
@@ -138,6 +141,10 @@ elif page == "Analytics":
     st.title("Analytics Dashboard")
 
     conn = sqlite3.connect(DB_PATH)
+    row_count = conn.execute("SELECT COUNT(*) FROM tickets").fetchone()[0]
+
+    if row_count < 100:
+        st.warning(f"Only {row_count} ticket(s) in database. CSV may not have loaded yet — try refreshing the page.")
 
     # Single query — uses satisfaction_score to derive Sentiment for all CSV tickets
     df = pd.read_sql("""
