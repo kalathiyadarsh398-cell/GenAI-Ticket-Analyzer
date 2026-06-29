@@ -9,8 +9,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from src.config import DB_PATH
 from src.ticket_processor import process_ticket
 from src.database import create_tables
+from src.data_loader import load_csv_if_empty
 
 create_tables()
+load_csv_if_empty()
 
 st.set_page_config(page_title="GenAI Ticket Analyzer", layout="wide")
 
@@ -136,18 +138,23 @@ elif page == "Analytics":
     st.title("Analytics Dashboard")
 
     conn = sqlite3.connect(DB_PATH)
+
+    # Single query — pulls CSV columns directly so charts are always populated
     df = pd.read_sql("""
         SELECT
-            t.ticket_id AS "Ticket ID",
-            t.submission_date AS "Submission Date",
+            t.ticket_id         AS "Ticket ID",
+            t.submission_date   AS "Submission Date",
+            t.original_category AS "Category",
+            t.original_priority AS "Priority",
+            t.channel           AS "Channel",
             t.resolution_hours,
-            COALESCE(p.ai_category, t.original_category) AS "Category",
-            COALESCE(p.ai_priority, t.original_priority) AS "Priority",
-            p.ai_sentiment AS "Sentiment",
-            a.action AS review_action
+            t.satisfaction_score,
+            t.assigned_agent    AS "Agent",
+            COALESCE(p.ai_sentiment, 'Not Analyzed') AS "Sentiment",
+            COALESCE(a.action, 'Pending') AS "Status"
         FROM tickets t
         LEFT JOIN ai_predictions p ON t.ticket_id = p.ticket_id
-        LEFT JOIN agent_actions a ON t.ticket_id = a.ticket_id
+        LEFT JOIN agent_actions  a ON t.ticket_id = a.ticket_id
     """, conn)
     conn.close()
 
@@ -157,36 +164,29 @@ elif page == "Analytics":
 
     df["Submission Date"] = pd.to_datetime(df["Submission Date"], errors="coerce")
 
-    def get_status(row):
-        if pd.notnull(row["review_action"]):
-            return row["review_action"].capitalize()
-        if pd.notnull(row["Sentiment"]):
-            return "Pending"
-        return "Unprocessed"
-
-    df["Status"] = df.apply(get_status, axis=1)
-
-    total = len(df)
-    analyzed = int(df["Sentiment"].notnull().sum())
-    reviewed = int(df["review_action"].notnull().sum())
-    pending = int((df["Status"] == "Pending").sum())
-    high_pri = int((df["Priority"].astype(str).str.lower() == "high").sum())
-    avg_hours = df["resolution_hours"].mean()
-    avg_label = f"{avg_hours:.1f} hrs" if pd.notnull(avg_hours) else "N/A"
+    # KPI values
+    total       = len(df)
+    analyzed    = int((df["Sentiment"] != "Not Analyzed").sum())
+    reviewed    = int((df["Status"] != "Pending").sum())
+    pending     = int((df["Status"] == "Pending").sum())
+    high_pri    = int((df["Priority"].astype(str).str.lower() == "high").sum())
+    avg_hours   = df["resolution_hours"].mean()
+    avg_label   = f"{avg_hours:.1f} hrs" if pd.notnull(avg_hours) else "N/A"
 
     # KPI row
     c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Total Tickets", f"{total:,}")
-    c2.metric("AI Analyzed", f"{analyzed:,}")
-    c3.metric("Agent Reviewed", f"{reviewed:,}")
-    c4.metric("Pending Review", f"{pending:,}")
-    c5.metric("Avg Resolution", avg_label)
-    c6.metric("High Priority", f"{high_pri:,}")
+    c1.metric("Total Tickets",   f"{total:,}")
+    c2.metric("AI Analyzed",     f"{analyzed:,}")
+    c3.metric("Agent Reviewed",  f"{reviewed:,}")
+    c4.metric("Pending Review",  f"{pending:,}")
+    c5.metric("Avg Resolution",  avg_label)
+    c6.metric("High Priority",   f"{high_pri:,}")
 
     st.markdown("---")
 
     colors = ["#3b82f6", "#22c55e", "#f97316", "#ef4444", "#a855f7"]
 
+    # Row 1: Tickets by Category | Priority Distribution
     col1, col2 = st.columns(2)
 
     with col1:
@@ -208,46 +208,73 @@ elif page == "Analytics":
 
     st.markdown("---")
 
+    # Row 2: Tickets Over Time | Channel Distribution
     col3, col4 = st.columns(2)
 
     with col3:
-        sent_df = df["Sentiment"].dropna().value_counts().rename_axis("Sentiment").reset_index(name="Count")
-        color_map = {"Positive": colors[1], "Neutral": colors[0], "Negative": colors[3]}
-        fig = px.pie(sent_df, values="Count", names="Sentiment", hole=0.4,
-                     title="Sentiment Distribution",
-                     color="Sentiment", color_discrete_map=color_map)
+        time_df = df.dropna(subset=["Submission Date"]).copy()
+        time_df["Month"] = time_df["Submission Date"].dt.to_period("M").astype(str)
+        date_df = time_df["Month"].value_counts().rename_axis("Month").reset_index(name="Tickets").sort_values("Month")
+        fig = px.line(date_df, x="Month", y="Tickets", markers=True,
+                      title="Tickets Over Time (Monthly)", color_discrete_sequence=[colors[4]])
+        fig.update_layout(margin=dict(l=10, r=10, t=40, b=10), plot_bgcolor="rgba(0,0,0,0)")
+        fig.update_xaxes(showgrid=False, tickangle=45)
+        fig.update_yaxes(showgrid=True, gridcolor="#e5e5e5")
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col4:
+        chan_df = df["Channel"].value_counts().rename_axis("Channel").reset_index(name="Count")
+        fig = px.pie(chan_df, values="Count", names="Channel", hole=0.4,
+                     title="Tickets by Channel", color_discrete_sequence=colors)
         fig.update_traces(textposition="inside", textinfo="percent+label")
         fig.update_layout(margin=dict(l=10, r=10, t=40, b=10))
         st.plotly_chart(fig, use_container_width=True)
 
-    with col4:
-        time_df = df.dropna(subset=["Submission Date"]).copy()
-        time_df["Date"] = time_df["Submission Date"].dt.date
-        date_df = time_df["Date"].value_counts().rename_axis("Date").reset_index(name="Tickets").sort_values("Date")
-        fig = px.line(date_df, x="Date", y="Tickets", markers=True,
-                      title="Tickets Over Time", color_discrete_sequence=[colors[4]])
-        fig.update_layout(margin=dict(l=10, r=10, t=40, b=10), plot_bgcolor="rgba(0,0,0,0)")
-        fig.update_xaxes(showgrid=False)
+    st.markdown("---")
+
+    # Row 3: Avg Resolution Time by Category | Satisfaction Score Distribution
+    col5, col6 = st.columns(2)
+
+    with col5:
+        res_df = (
+            df.groupby("Category")["resolution_hours"]
+            .mean()
+            .round(1)
+            .reset_index()
+            .rename(columns={"resolution_hours": "Avg Hours"})
+            .sort_values("Avg Hours", ascending=False)
+        )
+        fig = px.bar(res_df, x="Avg Hours", y="Category", orientation="h",
+                     title="Avg Resolution Time by Category (hrs)",
+                     color_discrete_sequence=[colors[2]])
+        fig.update_layout(yaxis={"categoryorder": "total ascending"},
+                          margin=dict(l=10, r=10, t=40, b=10), plot_bgcolor="rgba(0,0,0,0)")
+        fig.update_xaxes(showgrid=True, gridcolor="#e5e5e5")
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col6:
+        sat_df = (
+            df["satisfaction_score"].dropna().astype(int)
+            .value_counts().sort_index()
+            .rename_axis("Score").reset_index(name="Count")
+        )
+        sat_df["Score"] = sat_df["Score"].astype(str)
+        fig = px.bar(sat_df, x="Score", y="Count",
+                     title="Satisfaction Score Distribution",
+                     color="Score", color_discrete_sequence=colors, text="Count")
+        fig.update_traces(textposition="outside")
+        fig.update_layout(margin=dict(l=10, r=10, t=40, b=10),
+                          plot_bgcolor="rgba(0,0,0,0)", showlegend=False)
         fig.update_yaxes(showgrid=True, gridcolor="#e5e5e5")
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
 
-    status_df = df["Status"].value_counts().rename_axis("Status").reset_index(name="Count")
-    fig = px.bar(status_df, x="Status", y="Count", title="Review Status",
-                 color="Status", color_discrete_sequence=colors, text="Count")
-    fig.update_traces(textposition="outside")
-    fig.update_layout(margin=dict(l=10, r=10, t=40, b=10),
-                      plot_bgcolor="rgba(0,0,0,0)", showlegend=False)
-    fig.update_yaxes(showgrid=True, gridcolor="#e5e5e5")
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.markdown("---")
-
+    # Recent Tickets Table
     st.subheader("Recent Tickets")
-    cols = ["Ticket ID", "Category", "Priority", "Sentiment", "Status", "Submission Date"]
+    cols = ["Ticket ID", "Category", "Priority", "Channel", "Sentiment", "Status", "Submission Date"]
     display = df[cols].copy()
     if pd.api.types.is_datetime64_any_dtype(display["Submission Date"]):
         display = display.sort_values("Submission Date", ascending=False)
         display["Submission Date"] = display["Submission Date"].dt.strftime("%Y-%m-%d").fillna("N/A")
-    st.dataframe(display, use_container_width=True, hide_index=True)
+    st.dataframe(display.head(500), use_container_width=True, hide_index=True)

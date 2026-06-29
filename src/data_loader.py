@@ -1,13 +1,12 @@
 import pandas as pd
 import sqlite3
+import os
 from src.config import DB_PATH
 
+
 def load_data():
-
-    df = pd.read_csv("data/raw/customer_support_tickets.csv")
-
-    print(df.head())
-    print(df.shape)
+    csv_path = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "customer_support_tickets.csv")
+    df = pd.read_csv(csv_path)
 
     df = df.rename(columns={
         "Ticket_ID": "ticket_id",
@@ -27,12 +26,23 @@ def load_data():
     df["source"] = "csv"
 
     conn = sqlite3.connect(DB_PATH)
-
     df.to_sql("tickets", conn, if_exists="append", index=False)
-
     conn.close()
 
-    print("Data Loaded Successfully")
+    print("Data loaded successfully")
+
+
+def load_csv_if_empty():
+    conn = sqlite3.connect(DB_PATH)
+    count = conn.execute("SELECT COUNT(*) FROM tickets").fetchone()[0]
+    conn.close()
+
+    if count == 0:
+        print("No tickets found — loading CSV...")
+        load_data()
+    else:
+        print(f"Tickets already loaded: {count} rows")
+
 
 if __name__ == "__main__":
     load_data()
